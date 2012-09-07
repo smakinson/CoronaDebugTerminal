@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:WindowedApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+											 xmlns:s="library://ns.adobe.com/flex/spark" 
+											 xmlns:mx="library://ns.adobe.com/flex/mx" applicationComplete="init()">
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.utils.StringUtil;
+			
+			
+			private var s:ServerSocket;
+			private var clientSocket:Socket;
+			private var retryTimeout:uint;
+			
+			private function init():void{
+				connect();
+			}
+			
+			private function connect():void{
+				
+				if(retryTimeout)clearTimeout(retryTimeout);
+				
+				try{
+					if(s){
+						s.close();
+						s.removeEventListener(ServerSocketConnectEvent.CONNECT, onClientConnect);
+					}
+					
+					s = new ServerSocket();
+					s.addEventListener(ServerSocketConnectEvent.CONNECT, onClientConnect);
+					s.bind(parseInt(portNum.text), ipNum.text);
+					s.listen();
+					
+					console.text = "[Ready]\n";
+				}catch(err:Error){
+					console.text += "[Connect Error. Retrying in 3 Seconds]\n";
+					retryTimeout = setTimeout(connect, 3000);
+				}
+			}
+			
+			private function onClientConnect(e:ServerSocketConnectEvent):void{
+				console.text += "[Client Connected]\n";
+				clientSocket = e.socket;
+				clientSocket.addEventListener(Event.CLOSE, onClientClose);
+				clientSocket.addEventListener(ProgressEvent.SOCKET_DATA, onClientSocketData);
+			}
+			
+			private function onClientClose(e:Event):void{
+				var client:Socket = e.target as Socket;
+				client.removeEventListener(Event.CLOSE, onClientClose);
+				client.removeEventListener(ProgressEvent.SOCKET_DATA, onClientSocketData);
+			}
+			
+			private function onClientSocketData(e:ProgressEvent):void{
+				var buffer:ByteArray = new ByteArray();
+				clientSocket.readBytes(buffer, 0, clientSocket.bytesAvailable);
+				console.text += buffer.toString() + "\n";
+			}
+			
+			protected function clearConsole(e:MouseEvent):void{
+				console.text = "";
+			}
+			
+			protected function copyLuaCode(e:MouseEvent):void{
+				Clipboard.generalClipboard.setData(ClipboardFormats.TEXT_FORMAT, StringUtil.trim(lua.text));
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingBottom="5" paddingLeft="5" paddingRight="5" paddingTop="5"/>
+	</s:layout>
+	
+	<s:Spacer height="5"/>
+	<s:HGroup width="100%" verticalAlign="middle">
+		<s:Label text="Connect to"/>
+		<s:TextInput text="192.168.0.200" id="ipNum"/>
+		<s:Label text=":"/>
+		<s:TextInput text="8087" id="portNum"/>
+		<s:Button label="Connect" click="connect()"/>
+		<s:Spacer width="100%"/>
+		<s:Button label="Clear Terminal" click="clearConsole(event)"/>
+	</s:HGroup>
+	
+	<s:TabBar width="100%" dataProvider="{mainViews}" requireSelection="true"/>
+	<mx:ViewStack id="mainViews" width="100%" height="100%">
+		<s:NavigatorContent width="100%" height="100%" label="Terminal">
+			
+			<s:layout>
+				<s:VerticalLayout/>
+			</s:layout>
+			
+			
+			<s:TextArea width="100%" height="100%" id="console" paddingTop="10" paddingBottom="10" paddingLeft="10" paddingRight="10">
+				<s:text>
+					
+				</s:text>
+			</s:TextArea>
+		
+		</s:NavigatorContent>
+		<s:NavigatorContent width="100%" height="100%" label="Instructions and lua code">
+			
+			<s:layout>
+				<s:VerticalLayout/>
+			</s:layout>
+			
+			<s:TextArea fontWeight="bold" fontSize="15" width="100%" height="50" borderVisible="false">
+				<s:text>This terminal connects to the given ip address and port. Add the lua code below to your Corona project and then call trace() just as you would have called print(). Set DEV to false to stop all printing. Make sure the ip and port in both places match.</s:text>
+			</s:TextArea>
+			<s:Button label="Copy Lua Code" click="copyLuaCode(event)"/>
+			<s:TextArea width="100%" height="100%" id="lua" paddingTop="10" paddingBottom="10" paddingLeft="10" paddingRight="10">
+				<s:textFlow>
+				<s:TextFlow whiteSpaceCollapse="preserve">
+					<s:p>local DEV = true
+
+if DEV then
+	local socket = require("socket")
+	
+	local debugSocket = nil
+	local isSimulator = "simulator" == system.getInfo("environment")
+	
+	if not isSimulator then
+		debugSocket = socket.tcp()
+		-- Make sure this matches what you use in the terminal.
+		debugSocket:connect("192.168.0.200", 8087)
+	end
+	
+	_G.trace = function(...)
+		if isSimulator then
+			print(unpack(arg))
+		else
+			local message = ""
+			for i, v in ipairs(arg) do
+				message = message .. v .. "\t"
+			end
+			debugSocket:send(message)
+		end
+	end
+else
+	_G.trace = function()
+		return
+	end
+end
+					</s:p>
+				</s:TextFlow>
+				</s:textFlow>
+			</s:TextArea>
+			
+		</s:NavigatorContent>
+		
+	</mx:ViewStack>
+	
+</s:WindowedApplication>
